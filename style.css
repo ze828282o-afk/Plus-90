@@ -432,4 +432,6 @@ footer {
   .main-wrapper { flex-direction: column; gap: 20px; }
   .eid-side-panel { min-width: 100%; max-width: 100%; }
   .leaderboard-box ul { max-height: 130px; }
+}.hidden {
+    display: none !important;
 }
