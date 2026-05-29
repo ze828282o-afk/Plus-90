@@ -9,6 +9,9 @@
   <link rel="stylesheet" href="style.css">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- استدعاء مكتبة جوجل الرسمية والآمنة لتسجيل الدخول -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -34,9 +37,10 @@
       <div class="auth-sidebar-zone" style="width: 100%; border-top: 1px solid #222; margin-top: 30px; padding-top: 15px; text-align: center;">
         <div id="guestModeMsg" style="font-size: 0.8rem; color: #777; margin-bottom: 8px;">🎮 تلعب الآن كـ (ضيف)</div>
         
-        <button id="googleLoginBtn" class="option-btn" style="padding: 8px; font-size: 0.85rem; text-align: center; background: #fff; color: #000; font-weight: bold; width: 100%; border-radius: 8px; margin-bottom: 8px; border: none; cursor: pointer;">
-          🚀 الدخول بحساب Google
-        </button>
+        <!-- حاوية زر جوجل الرسمي والذكي -->
+        <div id="googleLoginContainer" style="margin-bottom: 8px; display: flex; justify-content: center;">
+          <div id="buttonDiv"></div>
+        </div>
 
         <button id="discordLoginBtn" class="option-btn" style="padding: 8px; font-size: 0.85rem; text-align: center; background: #5865F2; color: #fff; font-weight: bold; width: 100%; border-radius: 8px; margin-bottom: 12px; border: none; cursor: pointer;">
           🎮 الدخول بحساب Discord
@@ -90,7 +94,7 @@
           <span class="heart">❤️</span>
         </div>
         <div class="stats-compact">
-          <span>⭐ <span id=\"scoreValue\">0</span></span>
+          <span>⭐ <span id="scoreValue">0</span></span>
           <span>🎯 الإجابات: <span id="correctCount">0</span>/<span id="answeredCount">0</span></span>
         </div>
       </div>
