@@ -1,13 +1,15 @@
-// ==========================================================// إعدادات الربط بالسيرفر
+// ==========================================================
+// 1. إعدادات الربط بالسيرفر و Google Sign-In Identity
+// ==========================================================
 const SUPABASE_URL = 'https://jjricvhhkgvqbkgbnwtp.supabase.co'; 
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impqcmljdmhoa2d2cWJrZ2Jud3RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4OTcyNjcsImV4cCI6MjA5NTQ3MzI2N30.W-lSd89t6LHnlpUBhlM8Lkm80Rycq6THgWBUkdLBfcY'; 
+const GOOGLE_CLIENT_ID = '934522814894-v7kofmdfk0l6e0b7b12h9gnb1pajqghm.apps.googleusercontent.com';
 
 let supabaseClient = null;
+let currentUser = null;
 
-// حماية الكود: الانتظار حتى تحميل الـ HTML بالكامل قبل تشغيل أي جافا سكريبت
+// الانتظار حتى تحميل الـ HTML بالكامل قبل بدء التشغيل
 document.addEventListener("DOMContentLoaded", () => {
-    
-    // 1. محاولة ربط السيرفر بأمان دون إيقاف اللعبة
     try {
         if (typeof supabase !== 'undefined' && supabase !== null) {
             supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -16,49 +18,88 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("السيرفر لم يتصل، اللعبة تعمل محلياً كزائر.");
     }
 
-    // 2. إخفاء شاشات النهاية والفوز فوراً عند البداية لمنع التداخل
-    const gameOverScreen = document.getElementById("gameOverScreen");
-    const prizeScreen = document.getElementById("prizeScreen");
-    const quizCard = document.getElementById("quizCard");
-
-    if (gameOverScreen) gameOverScreen.style.display = "none";
-    if (prizeScreen) prizeScreen.style.display = "none";
-    if (quizCard) quizCard.style.display = "block"; // إظهار كارت اللعبة الأساسي فقط
-
-    // 3. تشغيل الدالة الأساسية لبدء اللعبة وتحميل الأسئلة
-    if (typeof initGame === "function") {
-        initGame();
-    } else {
-        // إذا كانت الدالة مدمجة بملف آخر، نقوم بتشغيل العدادات والأسئلة هنا
-        updateStatsUI();
-        loadQuestion();
-    }
+    // ربط وتسجيل الدخول عبر جوجل تلقائياً
+    initializeGoogleAuth();
+    initGame();
+    fetchLeaderboard();
 });
 
-// تكتيك لإعادة تشغيل اللعبة بأمان من أزرار الـ Restart
-function restartTacticsGame() {
-    location.reload(); // إعادة تحميل الصفحة هي أأمن طريقة لترتيب الـ DOM من جديد
-}احطهم قبل الاسئله ولا فين
+function initializeGoogleAuth() {
+    if (typeof google !== 'undefined') {
+        google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleCredentialResponse
+        });
+        google.accounts.id.renderButton(
+            document.getElementById("buttonDiv"),
+            { theme: "dark", size: "medium", text: "signin_with" }
+        );
+    }
+}
+
+async function handleCredentialResponse(response) {
+    try {
+        const { data, error } = await supabaseClient.auth.signInWithIdToken({
+            provider: 'google',
+            token: response.credential,
+        });
+        if (error) throw error;
+        if (data?.user) {
+            currentUser = data.user;
+            updateUserUI(currentUser);
+            loadUserProgress();
+        }
+    } catch (err) {
+        console.error("فشل تسجيل الدخول بجوجل:", err.message);
+    }
+}
+
+function updateUserUI(user) {
+    const guestModeMsg = document.getElementById("guestModeMsg");
+    const googleLoginContainer = document.getElementById("googleLoginContainer");
+    const userProfileInfo = document.getElementById("userProfileInfo");
+    const userAvatarImg = document.getElementById("userAvatarImg");
+    const userProfileName = document.getElementById("userProfileName");
+    const logoutBtn = document.getElementById("logoutBtn");
+
+    if (user) {
+        if (guestModeMsg) guestModeMsg.style.display = "none";
+        if (googleLoginContainer) googleLoginContainer.style.display = "none";
+        if (userProfileInfo) userProfileInfo.classList.remove("hidden");
+        if (logoutBtn) logoutBtn.classList.remove("hidden");
+
+        if (userProfileName) userProfileName.innerText = user.user_metadata?.full_name || user.email;
+        if (userAvatarImg) userAvatarImg.src = user.user_metadata?.avatar_url || 'favicon.png';
+    }
+}
+
+if (document.getElementById("logoutBtn")) {
+    document.getElementById("logoutBtn").onclick = async function() {
+        if (supabaseClient) await supabaseClient.auth.signOut();
+        location.reload();
+    };
+}
+
 // ==========================================================
 // 2. بنك الأسئلة الكامل لـ Z3Z3 Tactics (105 سؤال جاهز)
 // ==========================================================
 const questionsDatabase = [
   // ==================== مستوى المبتدئين (من 1 إلى 35) ====================
   { id: 1, text: "من هو أكثر مدرب فوزًا بدوري أبطال أوروبا؟", options: ["أليكس فيرغسون", "بيب غوارديولا", "كارلو أنشيلوتي", "زين الدين زيدان"], correct: 2, minLevel: 0 },
-  { id: 2, text: "ما هو النادي الأكثر تتويجًا بالدوري الإنجليزي الممتاز؟", options: ["ليفربول", "مانشستر يونايتد", "أرسنال", "مانشستر سيتي"], correct: 1, minLevel: 0 },
+  { id: 2, text: "ما هو النادي الأكثر تتويجًا بالدوري الإنجليزي الممتاز？", options: ["ليفربول", "مانشستر يونايتد", "أرسنال", "مانشستر سيتي"], correct: 1, minLevel: 0 },
   { id: 3, text: "من سجل هدف 'يد الله' الشهير في كأس العالم 1986؟", options: ["بيليه", "مارادونا", "زين الدين زيدان", "جيف هيرست"], correct: 1, minLevel: 0 },
   { id: 4, text: "أي نادٍ إيطالي يُعجبه ويلقب باسم 'البيانكونيري'؟", options: ["إنتر ميلان", "يوفنتوس", "ميلان", "روما"], correct: 1, minLevel: 0 },
   { id: 5, text: "من فاز بجائزة أفضل لاعب في العالم (ذا بيست) لعام 2023؟", options: ["كيليان مبابي", "إيرلينغ هالاند", "ليونيل ميسي", "فينيسيوس جونيور"], correct: 2, minLevel: 0 },
-  { id: 6, text: "كم عدد أندية الدوري الإنجليزي الممتاز (البريميرليغ) في الموسم الواحد？", options: ["18", "20", "22", "24"], correct: 1, minLevel: 0 },
+  { id: 6, text: "كم عدد أندية الدوري الإنجليزي الممتاز (البريميرليغ) في الموسم الواحد؟", options: ["18", "20", "22", "24"], correct: 1, minLevel: 0 },
   { id: 7, text: "من هو الهداف التاريخي لبطولات كأس العالم؟", options: ["رونالدو (البرازيلي)", "ميروسلاف كلوزه", "غيرد مولر", "جاست فونتين"], correct: 1, minLevel: 0 },
   { id: 8, text: "أين أقيمت بطولة كأس العالم لكرة القدم لعام 2022؟", options: ["قطر", "روسيا", "البرازيل", "جنوب أفريقيا"], correct: 0, minLevel: 0 },
-  { id: 9, text: "أي منتخب أمريكي جنوبي يلقب بـ 'السامبا'؟", options: ["الأرجنتين", "البرازيل", "أوروغواي", "كولومبيا"], correct: 1, minLevel: 0 },
+  { id: 9, text: "أي منتخب أمريكي جنوبي يلقب بـ 'السامبا'؟", options: ["الأرجنتين", "البرازيل", "أوروغواي", "کلمبیا"], correct: 1, minLevel: 0 },
   { id: 10, text: "ما هو النادي الذي يرتدي قميصاً أحمر وأبيض في مدينة مدريد؟", options: ["ريال مدريد", "أتلتيكو مدريد", "خيتافي", "رايو فايكانو"], correct: 1, minLevel: 0 },
   { id: 11, text: "كم عدد بطولات كأس العالم التي فازت بها إيطاليا في تاريخها؟", options: ["2", "3", "4", "5"], correct: 2, minLevel: 0 },
   { id: 12, text: "من هو هداف نادي ريال مدريد التاريخي في كل المسابقات؟", options: ["راؤول غونزاليس", "كريم بنزيما", "كريستيانو رونالدو", "ألفريدو دي ستيفانو"], correct: 2, minLevel: 0 },
   { id: 13, text: "من هو هداف نادي برشلونة التاريخي؟", options: ["رونالدينيو", "ليونيل ميسي", "لويس سواريز", "صامويل إيتو"], correct: 1, minLevel: 0 },
   { id: 14, text: "ما هي الدولة التي فازت بأول نسخة لبطولة كأس العالم عام 1930؟", options: ["الأرجنتين", "البرازيل", "أوروغواي", "إيطاليا"], correct: 2, minLevel: 0 },
-  { id: 15, text: "أي نادٍ إنجليزي يقع في لندن ويلقب بـ 'المدفعجية'？", options: ["تشيلسي", "توتنهام", "أرسنال", "وست هام"], correct: 2, minLevel: 0 },
+  { id: 15, text: "أي نادٍ إنجليزي يقع في لندن ويلقب بـ 'المدفعجية'؟", options: ["تشيلسي", "توتنهام", "أرسنال", "وست هام"], correct: 2, minLevel: 0 },
   { id: 16, text: "ما هو النادي الفرنسي الأكثر تتويجاً بلقب الدوري المحلي؟", options: ["باريس سان جيرمان", "مارسيليا", "ليون", "سانت إتيان"], correct: 0, minLevel: 0 },
   { id: 17, text: "كم عدد الكرات الذهبية (Ballon d'Or) التي حققها كريستيانو رونالدو؟", options: ["3", "4", "5", "6"], correct: 2, minLevel: 0 },
   { id: 18, text: "أي لاعب برازيلي شهير يلقب بـ 'الظاهرة'؟", options: ["رونالدينيو", "كريستيانو رونالدو", "رونالدو نازاريو", "روماريو"], correct: 2, minLevel: 0 },
@@ -91,10 +132,10 @@ const questionsDatabase = [
   { id: 43, text: "أي نادٍ إيطالي عريق وعالمي يُلقب بـ 'السيدة العجوز'؟", options: ["ميلان", "إنتر ميلان", "يوفنتوس", "روما"], correct: 2, minLevel: 20 },
   { id: 44, text: "من هو اللاعب الأفريقي الوحيد في التاريخ الذي فاز بجائزة الكرة الذهبية؟", options: ["صامويل إيتو", "ديديه دروغبا", "جورج ويا", "محمد صلاح"], correct: 2, minLevel: 20 },
   { id: 45, text: "أي منتخب عربي توج بلقب كأس أمم أفريقيا لعام 2019 في مصر؟", options: ["مصر", "السنغال", "الجزائر", "نيجيريا"], correct: 2, minLevel: 20 },
-  { id: 46, text: "ما هو النادي الألماني الوحيد الذي فاز بدوري الأبطال غير بايرن ميونخ وهامبورغ？", options: ["بوروسيا دورتموند", "باير ليفركوزن", "شالكه", "فيردر بريمن"], correct: 0, minLevel: 20 },
+  { id: 46, text: "ما هو النادي الألماني الوحيد الذي فاز بدوري الأبطال غير بايرن ميونخ وهامبورغ؟", options: ["بوروسيا دورتموند", "باير ليفركوزن", "شالكه", "فيردر بريمن"], correct: 0, minLevel: 20 },
   { id: 47, text: "من هو هداف دوري أبطال أوروبا التاريخي؟", options: ["ليونيل ميسي", "كريستيانو رونالدو", "روبرت ليفاندوفسكي", "كريم بنزيما"], correct: 1, minLevel: 20 },
   { id: 48, text: "أي لاعب يلقب بـ 'النفاثة الفنلندية' وصنع مجداً كبيراً مع ليفربول؟", options: ["ياري ليتمانن", "سامي هيبيا", "تيمو بوكي", "ميكائيل فورسيل"], correct: 0, minLevel: 20 },
-  { id: 49, text: "من المدرب الذي قاد تشيلسي كبديل لتحقيق أول لقب دوري أبطال أوروبا عام 2012؟", options: ["جوزيه مورينيو", "روبرتو دي ماتيو", "توماس توخيل", "كارلو أنشيلوتي"], correct: 1, minLevel: 20 },
+  { id: 49, text: "من المدرب الذي قاد تشيلسي كبديل لتحقيق أول لقب دوري أبطال أوروبا عام 2012？", options: ["جوزيه مورينيو", "روبرتو دي ماتيو", "توماس توخيل", "كارلو أنشيلوتي"], correct: 1, minLevel: 20 },
   { id: 50, text: "من هو اللاعب العربي الأكثر تسجيلاً للأهداف في تاريخ دوري أبطال أوروبا؟", options: ["رباح ماجر", "رياض محرز", "محمد صلاح", "حكيم زياش"], correct: 2, minLevel: 20 },
   { id: 51, text: "أي نادٍ إنجليزي هو الوحيد من لندن الذي فاز بدوري الأبطال قبل عام 2020؟", options: ["أرسنال", "توتنهام", "تشيلسي", "وست هام"], correct: 2, minLevel: 20 },
   { id: 52, text: "من هو أصغر لاعب يسجل هدفاً في تاريخ بطولات كأس العالم لكرة القدم؟", options: ["بيليه", "كيليان مبابي", "ليونيل ميسي", "مايكل أوين"], correct: 0, minLevel: 20 },
@@ -105,236 +146,94 @@ const questionsDatabase = [
   { id: 57, text: "من هو هداف بطولة كأس العالم 2022 التي أقيمت في قطر؟", options: ["ليونيل ميسي", "إيرلينغ هالاند", "كيليان مبابي", "أوليفيه جيرو"], correct: 2, minLevel: 20 },
   { id: 58, text: "أي منتخب فاز بلقب كأس أمم أفريقيا ثلاث مرات متتالية (2006, 2008, 2010)؟", options: ["الكاميرون", "غانا", "مصر", "نيجيريا"], correct: 2, minLevel: 20 },
   { id: 59, text: "ما هو الملعب الشهير الذي يعتبر المعقل الأساسي لمنتخب إنجلترا؟", options: ["أولد ترافورد", "أنفيلد", "ويمبلي", "ستامفورد بريدج"], correct: 2, minLevel: 20 },
-  { id: 60, text: "من هو اللاعب الفرنسي الأسطوري الفائز بالكرة الذهبية 1998 ورئيس اليويفا السابق؟", options: ["زين الدين زيدان", "ميشيل بلاتيني", "تييري هنري", "ديديه ديشامب"], correct: 1, minLevel: 20 },
-  { id: 61, text: "أي نادٍ إيطالي يلقب بـ 'الروسونيري'؟", options: ["إنتر ميلان", "ميلان", "روما", "لاتسيو"], correct: 1, minLevel: 20 },
-  { id: 62, text: "من هو المدرب البرتغالي الشهير الملقب بـ 'السبيشال وان'؟", options: ["بيب غوارديولا", "جوزيه مورينيو", "يورغن كلوب", "أنتونيو كونتي"], correct: 1, minLevel: 20 },
-  { id: 63, text: "أي منتخب فاز بأول نسخة لبطولة كأس الأمم الأوروبية عام 1960؟", options: ["الاتحاد السوفيتي", "يوغوسلافيا", "إسبانيا", "ألمانيا الغربية"], correct: 0, minLevel: 20 },
-  { id: 64, text: "من هو هداف منتخب إيطاليا التاريخي في كل العصور؟", options: ["روبرتو باجيو", "أليساندرو ديل بييرو", "لويجي ريفا", "فرانشيسكو توتي"], correct: 2, minLevel: 20 },
-  { id: 65, text: "أي نادٍ إسباني يقع في إقليم الباسك ويعتمد فقط على لاعبين من الإقليم؟", options: ["ريال سوسيداد", "أتلتيك بيلباو", "أوساسونا", "إيبار"], correct: 1, minLevel: 20 },
-  { id: 66, text: "كم عدد الكرات الذهبية التي نالها الأسطورة الأرجنتينية ليونيل ميسي؟", options: ["5 الكرات", "7 الكرات", "8 الكرات", "9 الكرات"], correct: 2, minLevel: 20 },
-  { id: 67, text: "من هو حارس المرمى الأسطوري والشهير لنادي ريال مدريد والملقب بـ 'القديس'？", options: ["إيكر كاسياس", "كيلور نافاس", "جيانلويجي بوفون", "أوليفر كان"], correct: 0, minLevel: 20 },
-  { id: 68, text: "أي لاعب سجل أسرع هدف في تاريخ بطولات كأس العالم (بعد 11 ثانية)؟", options: ["هاكان شوكور", "بريان روبسون", "بيليه", "كلينت ديمبسي"], correct: 0, minLevel: 20 },
-  { id: 69, text: "من هو النجم الإيفواري الهداف التاريخي للأجانب في نادي تشيلسي؟", options: ["يايا توريه", "ديديه دروغبا", "سالومون كالو", "جون أوبي ميكل"], correct: 1, minLevel: 20 },
-  { id: 70, text: "أي نادٍ برتغالي نشأ فيه وترعرع الأسطورة كريستيانو رونالدو؟", options: ["بنفيكا", "بورتو", "سبورتينغ لشبونة", "براغا"], correct: 2, minLevel: 20 },
+  { id: 60, text: "من هو اللاعب الفرنسي الأسطوري الفائز بالكرة الذهبية 1998 ورئيس اليويفا السابق؟", options: ["زين الدين زيدان", "ميشيل بلاتيني", "تييري هنري", "ريمون كوبا"], correct: 1, minLevel: 20 },
+  { id: 61, text: "من هو الحارس الأسطوري لمنتخب إسبانيا وريال مدريد والملقب بـ 'القديس'؟", options: ["إيكر كاسياس", "فيكتور فالديز", "دافيد دي خيا", "سانتياغو كانيزاريس"], correct: 0, minLevel: 20 },
+  { id: 62, text: "أي لاعب فاز بلقب هداف دوري أبطال أوروبا في موسم 2022-2023؟", options: ["كريم بنزيما", "إيرلينغ هالاند", "فينيسيوس جونيور", "محمد صلاح"], correct: 1, minLevel: 20 },
+  { id: 63, text: "كم عدد الفرق المشاركة في دور المجموعات لدوري أبطال أوروبا بالنظام القديم المعتاد؟", options: ["24", "32", "36", "40"], correct: 1, minLevel: 20 },
+  { id: 64, text: "من هو صاحب أسرع هدف في تاريخ بطولات كأس العالم (بعد 11 ثانية فقط)؟", options: ["هاكان شوكور", "بريان روبسون", "بيليه", "كلينت ديمبسي"], correct: 0, minLevel: 20 },
+  { id: 65, text: "ما هو النادي الذي فاز بأول بطولة دوري أبطال أوروبا في تاريخه عام 2023؟", options: ["باريس سان جيرمان", "أتلتيكو مدريد", "مانشستر سيتي", "نيوكاسل"], correct: 2, minLevel: 20 },
+  { id: 66, text: "من هو اللاعب الذي سجل أكبر عدد من الأهداف في مباراة واحدة في تاريخ البريميرليغ (5 أهداف) وتكرر من عدة لاعبين ولكن من هو الأول؟", options: ["أندي كول", "ألان شيرر", "سيرجيو أغويرو", "ديميتار برباتوف"], correct: 0, minLevel: 20 },
+  { id: 67, text: "أي نادٍ هولندي حقق لقب دوري أبطال أوروبا 4 مرات في تاريخه؟", options: ["بي إس في آيندهوفن", "فاينورد", "أياكس أمستردام", "ألكمار"], correct: 2, minLevel: 20 },
+  { id: 68, text: "من هو هداف منتخب الأرجنتين التاريخي في بطولات كأس العالم لكرة القدم؟", options: ["غابرييل باتيستوتا", "دييغو مارادونا", "ليونيل ميسي", "هرنان كرسبو"], correct: 2, minLevel: 20 },
+  { id: 69, text: "أي منتخب أوروبي يلقب بـ 'الشياطين الحمر' ويضم جيل دي بروين ولوكاكو؟", options: ["البرتغال", "بلجيكا", "سويسرا", "الدنمارك"], correct: 1, minLevel: 20 },
+  { id: 70, text: "ما هو النادي الأوروبي الوحيد الذي حقق الثلاثية التاريخية مرتين؟", options: ["ريال مدريد", "بايرن ميونخ", "برشلونة", "مانشستر سيتي"], correct: 2, minLevel: 20 },
 
-  // ==================== مستوى أساطير الـ Z3Z3 (من 71 إلى 105) ====================
-  { id: 71, text: "من هو هداف نادي إنتر ميلان التاريخي في كل المسابقات؟", options: ["خافيير زانيتي", "جوزيبي مياتزا", "أليساندرو ألتوبيلي", "روبيرتو بونينسينيا"], correct: 1, minLevel: 40 },
-  { id: 72, text: "أي نادٍ فاز بلقب الدوري الإيطالي عام 1970 لأول مرة والوحيدة في تاريخه؟", options: ["كالياري", "بولونيا", "تورينو", "سامبدوريا"], correct: 0, minLevel: 40 },
-  { id: 73, text: "لاعب سجل في نهائي دوري أبطال أوروبا مع ناديين مختلفين وفاز باللقب معهما؟", options: ["كريستيانو رونالدو", "ليونيل ميسي", "راؤول غونزاليس", "صامويل إيتو"], correct: 0, minLevel: 40 },
-  { id: 74, text: "من هو أول منتخب أفريقي يصل إلى ربع نهائي كأس العالم لكرة القدم؟", options: ["المغرب", "الكاميرون", "السنغال", "غانا"], correct: 1, minLevel: 40 },
-  { id: 75, text: "ما هو المنتخب الوحيد الذي تأهل لجميع بطولات كأس العالم دون غياب واحد؟", options: ["ألمانيا", "إيطاليا", "الأرجنتين", "البرازيل"], correct: 3, minLevel: 40 },
-  { id: 76, text: "من هو اللاعب الذي طُرد في المباراة النهائية لكأس العالم 2006؟", options: ["تييري هنري", "باتريك فييرا", "زين الدين زيدان", "ماركو ماتيراتزي"], correct: 2, minLevel: 40 },
-  { id: 77, text: "ما هو النادي الأوروبي الوحيد الذي حقق السداسية التاريخية بجانب برشلونة؟", options: ["ريال مدريد", "بايرن ميونخ", "مانشستر سيتي", "ليفربول"], correct: 1, minLevel: 40 },
-  { id: 78, text: "من هو المدرب التكتيكي العبقري صاحب لقب البروفيسور ومؤسس ثورة أرسنال؟", options: ["أرسين فينجر", "أليكس فيرغسون", "جوزيه مورينيو", "يوب هاينكس"], correct: 0, minLevel: 40 },
-  { id: 79, text: "أي منتخب فاز بلقب كأس العالم لكرة القدم عام 1998 على أرضه؟", options: ["البرازيل", "إيطاليا", "فرنسا", "كرواتيا"], correct: 2, minLevel: 40 },
-  { id: 80, text: "ما هو الرقم القياسي لأكثر عدد أهداف سجلها لاعب في مباراة واحدة بكأس العالم؟", options: ["4 أهداف", "5 أهداف", "6 أهداف", "7 أهداف"], correct: 1, minLevel: 40 },
-  { id: 81, text: "من هو الهداف التاريخي لمنتخب فرنسا الأول؟", options: ["تييري هنري", "زين الدين زيدان", "أوليفيه جيرو", "ميشيل بلاتيني"], correct: 2, minLevel: 40 },
-  { id: 82, text: "من هو اللاعب الإنجليزي الشهير الذي فاز بالكرة الذهبية عام 2001 مع ليفربول؟", options: ["ديفيد بيكهام", "ستيفن جيرارد", "مايكل أوين", "فرانك لامبارد"], correct: 2, minLevel: 40 },
-  { id: 83, text: "أي نادٍ إسباني يلقب بـ 'الغواصات الصفراء'؟", options: ["فالنسيا", "إشبيلية", "فياريال", "سيلتا فيغو"], correct: 2, minLevel: 40 },
-  { id: 84, text: "من هو هداف بطولة دوري أبطال أوروبا في موسم واحد تاريخياً (17 هدفاً)؟", options: ["ليونيل ميسي", "كريستيانو رونالدو", "كريم بنزيما", "روبرت ليفاندوفسكي"], correct: 1, minLevel: 40 },
-  { id: 85, text: "ما هي الدولة التي استضافت بطولة كأس العالم لعام 1994؟", options: ["إيطاليا", "الولايات المتحدة", "فرنسا", "المكسيك"], correct: 1, minLevel: 40 },
-  { id: 86, text: "من هو النجم الهولندي الأسطوري الذي اخترع الكرة الشاملة وحمل رقم 14؟", options: ["ماركو فان باستن", "رود خوليت", "يوهان كرويف", "دنيس بيركامب"], correct: 2, minLevel: 40 },
-  { id: 87, text: "أي نادٍ أوروبي فاز بلقب دوري أبطال أوروبا 7 مرات في تاريخه؟", options: ["ريال مدريد", "ميلان", "بايرن ميونخ", "ليفربول"], correct: 1, minLevel: 40 },
-  { id: 88, text: "من هو اللاعب الأرجنتيني الأسطوري الهداف التاريخي لنادي فيورنتينا الإيطالي؟", options: ["دييغو مارادونا", "غابرييل باتيستوتا", "هرنان كريسبو", "خافيير زانيتي"], correct: 1, minLevel: 40 },
-  { id: 89, text: "ما هو النادي الألماني الذي كسر هيمنة بايرن ميونخ وفاز بالبوندسليغا بلا هزيمة 2024؟", options: ["بوروسيا دورتموند", "لايبزيغ", "باير ليفركوزن", "شتوتغارت"], correct: 2, minLevel: 40 },
-  { id: 90, text: "من هو الحكم الإيطالي الأسطوري الشهير والأصلع الذي أدار نهائي كأس العالم 2002؟", options: ["بييرلويجي كولينا", "هاوارد ويب", "مارك كلاتنبرغ", "نستور بيتانا"], correct: 0, minLevel: 40 },
-  { id: 91, text: "أي نادٍ إنجليزي يلقب بـ 'التوفيز' ويقع في مدينة ليفربول؟", options: ["ليفربول", "إيفرتون", "ترانمير روفرز", "أستون فيلا"], correct: 1, minLevel: 40 },
-  { id: 92, text: "من هو اللاعب الآسيوي الأعلى ترتيباً وتتويجاً بالجوائز في البريميرليغ مع توتنهام؟", options: ["PARK JI SUNG", "سون هيونغ مين", "شينجي كاغاوا", "مينامينو"], correct: 1, minLevel: 40 },
-  { id: 93, text: "من هو الهداف التاريخي لمنتخب البرازيل في المباريات الرسمية للفيفا؟", options: ["بيليه", "رونالدو نازاريو", "نيمار داسيلفا", "روماريو"], correct: 2, minLevel: 40 },
-  { id: 94, text: "أي منتخب فاز بكأس العالم لكرة القدم عام 2010 في جنوب أفريقيا؟", options: ["هولندا", "ألمانيا", "إسبانيا", "الأوروغواي"], correct: 2, minLevel: 40 },
-  { id: 95, text: "من هو المدافع التاريخي الوحيد الذي فاز بالكرة الذهبية في القرن الحالي (2006)؟", options: ["باولو مالديني", "فابيو كانافارو", "سيرجيو راموس", "جون تيري"], correct: 1, minLevel: 40 },
-  { id: 96, text: "ما هو لقب نادي نيوكاسل يونايتد الإنجليزي؟", options: ["الماكبايس (القماري)", "الثعالب", "الذئاب", "الفيلانز"], correct: 0, minLevel: 40 },
-  { id: 97, text: "كم عدد ألقاب نادي ريال مدريد في بطولة دوري أبطال أوروبا حتى نهاية عام 2024؟", options: ["13 لقباً", "14 لقباً", "15 لقباً", "16 لقباً"], correct: 2, minLevel: 40 },
-  { id: 98, text: "من هو اللاعب الذي سجل هدف الفوز القاتل لإسبانيا في نهائي كأس العالم 2010？", options: ["تشافي هيرنانديز", "أندريس إنييستا", "ديفيد فيا", "فرناندو توريس"], correct: 1, minLevel: 40 },
-  { id: 99, text: "أي نادٍ فرنسي هو الوحيد الذي توج بلقب دوري أبطال أوروبا في التاريخ (عام 1993)؟", options: ["باريس سان جيرمان", "أولمبيك مارسيليا", "ليون", "موناكو"], correct: 1, minLevel: 40 },
-  { id: 100, text: "من هو الهداف التاريخي لبطولة كأس أمم أوروبا (اليورو)؟", options: ["ميشيل بلاتيني", "كريستيانو رونالدو", "تييري هنري", "ألان شيرر"], correct: 1, minLevel: 40 },
-  { id: 101, text: "من هو اللاعب الوحيد الذي فاز بكأس العالم 3 مرات كلاعب؟", options: ["مارادونا", "بيليه", "رونالدو نازاريو", "روماريو"], correct: 1, minLevel: 40 },
-  { id: 102, text: "أي نادٍ إيطالي يلقب بـ 'النسور' ويلعب في العاصمة روما؟", options: ["روما", "لاتسيو", "تورينو", "فيورنتينا"], correct: 1, minLevel: 40 },
-  { id: 103, text: "من هو اللاعب الأفريقي الفائز بالحذاء الذهبي للبريميرليغ مع بلاكبرن وسندرلاند قديماً؟", options: ["ديديه دروغبا", "بيني ماكارثي", "توني يبواه", "حسام حسن"], correct: 1, minLevel: 40 },
-  { id: 104, text: "ما هي الدولة الأفريقية التي نظمت أول بطولة لكأس العالم في القارة السمراء عام 2010؟", options: ["مصر", "المغرب", "جنوب أفريقيا", "نيجيريا"], correct: 2, minLevel: 40 },
-  { id: 105, text: "من هو العبقري الإيطالي الذي يعتبر المدرب الأكثر فوزاً بالدوري الإيطالي (7 مرات)？", options: ["جوفاني تراباتوني", "مارتشيلو ليبي", "كارلو أنشيلوتي", "ماسيمليانو أليغري"], correct: 0, minLevel: 40 }
+  // ==================== مستوى خبراء التكتيك (من 71 إلى 105) ====================
+  { id: 71, text: "ما هو المنتخب الأفريقي الوحيد الذي وصل إلى نصف نهائي كأس العالم؟", options: ["الكاميرون", "السنغال", "غانا", "المغرب"], correct: 3, minLevel: 45 },
+  { id: 72, text: "من هو النجم الفائز بالكرة الذهبية لعام 2007 قبل هيمنة ميسي ورونالدو؟", options: ["كاكا", "رونالدينيو", "تييري هنري", "أندري شيفتشينكو"], correct: 0, minLevel: 45 },
+  { id: 73, text: "أي لاعب يحمل لقب الهداف التاريخي لمنتخب البرازيل في المباريات الرسمية؟", options: ["بيليه", "رونالدو نازاريو", "نيمار داسيلفا", "روماريو"], correct: 2, minLevel: 45 },
+  { id: 74, text: "من هو أكثر لاعب تحقيقاً للألقاب والبطولات الجماعية في تاريخ كرة القدم؟", options: ["ليونيل ميسي", "داني ألفيس", "كريستيانو رونالدو", "أندريس إنييستا"], correct: 0, minLevel: 45 },
+  { id: 75, text: "في أي عام حقق المنتخب الدنماركي معجزته وفاز بكأس أمم أوروبا بعد استدعائه من الإجازة؟", options: ["1988", "1992", "1996", "2000"], correct: 1, minLevel: 45 },
+  { id: 76, text: "من هو المدرب الإيطالي الأسطوري الوحيد الذي فاز بلقب الدوري في 4 دول أوروبية مختلفة؟", options: ["فابيو كابيلو", "كارلو أنشيلوتي", "مارتشيلو ليبي", "أنطونيو كونتي"], correct: 1, minLevel: 45 },
+  { id: 77, text: "كم عدد الأهداف الإجمالية التي سجلها الأسطورة بيليه في مسيرته بحسب توثيق الفيفا الرسمي؟", options: ["1281", "757", "830", "650"], correct: 1, minLevel: 45 },
+  { id: 78, text: "أي لاعب فاز بجائزة هداف كأس العالم 2002 برصيد 8 أهداف؟", options: ["ميروسلاف كلوزه", "رونالدو نازاريو", "ريفالدو", "تييري هنري"], correct: 1, minLevel: 45 },
+  { id: 79, text: "من هو هداف الدوري الإيطالي التاريخي (السيري آ)؟", options: ["فرانشيسكو توتي", "سيلفيو بيولا", "جوزيبي مياتزا", "أنتونيو دي ناتالي"], correct: 1, minLevel: 45 },
+  { id: 80, text: "ما هو النادي الذي لعب له الأسطورة دييغو مارادونا في إسبانيا غير برشلونة؟", options: ["إشبيلية", "فالنسيا", "أتلتيكو مدريد", "ريال سرقسطة"], correct: 0, minLevel: 45 },
+  { id: 81, text: "أي نادٍ أوروبي تأسس في عام 1899 على يد السويسري خوان غامبر؟", options: ["ريال مدريد", "برشلونة", "بايرن ميونخ", "يوفنتوس"], correct: 1, minLevel: 45 },
+  { id: 82, text: "من هو اللاعب الذي سجل هدف الفوز لمنتخب إسبانيا في نهائي كأس العالم 2010؟", options: ["تشافي هيرنانديز", "أندريس إنييستا", "ديفيد فيا", "فرناندو توريس"], correct: 1, minLevel: 45 },
+  { id: 83, text: "أي منتخب فاز بأول نسخة من بطولة دوري الأمم الأوروبية عام 2019؟", options: ["فرنسا", "البرتغال", "هولندا", "إسبانيا"], correct: 1, minLevel: 45 },
+  { id: 84, text: "من هو الهداف التاريخي لمنتخب فرنسا لكرة القدم حالياً؟", options: ["تييري هنري", "أوليفيه جيرو", "كيليان مبابي", "زين الدين زيدان"], correct: 1, minLevel: 45 },
+  { id: 85, text: "ما هو النادي الإنجليزي القديم والعريق الذي حقق دوري أبطال أوروبا مرتين متتاليتين عامي 1979 و 1980؟", options: ["أستون فيلا", "نوتينغهام فورست", "ليدز يونايتد", "توتنهام"], correct: 1, minLevel: 45 },
+  { id: 86, text: "من هو اللاعب الوحيد الذي حقق لقب دوري أبطال أوروبا مع 3 أندية مختلفة (أياكس، ريال مدريد، وميلان)؟", options: ["كلارنس سيدورف", "كريستيانو رونالدو", "صامويل إيتو", "زلاتان إبراهيموفيتش"], correct: 0, minLevel: 45 },
+  { id: 87, text: "أي حارس مرمى يحمل الرقم القياسي لأطول فترة نظافة شباك في تاريخ كأس العالم؟", options: ["والتر زينجا", "جانلويجي بوفون", "إيكر كاسياس", "أوليفر كان"], correct: 0, minLevel: 45 },
+  { id: 88, text: "من هو المدرب البرتغالي الشهير الذي أطلق على نفسه لقب 'The Special One'؟", options: ["جورجي جيسوس", "جوزيه مورينيو", "فرناندو سانتوس", "روبن أموريم"], correct: 1, minLevel: 45 },
+  { id: 89, text: "أي نادٍ ألماني كسر هيمنة بايرن ميونخ وحقق دوري لا هزيمة الأسطوري 2024؟", options: ["بوروسيا دورتموند", "لايبزيغ", "باير ليفركوزن", "شتوتغارت"], correct: 2, minLevel: 45 },
+  { id: 90, text: "من هو اللاعب الذي فاز بجائزة الكرة الذهبية لعام 2018 بعد قيادة كرواتيا لنهائي المونديال؟", options: ["لوكا مودريتش", "إيفان راكيتيتش", "كريستيانو رونالدو", "أنطوان غريزمان"], correct: 0, minLevel: 45 },
+  { id: 91, text: "أي لاعب سجل أسرع هاتريك في تاريخ الدوري الإنجليزي الممتاز (خلال دقيقتين و56 ثانية)؟", options: ["ساديو ماني", "روبي فاولر", "رحيم ستيرلينغ", "سون هيونغ مين"], correct: 0, minLevel: 45 },
+  { id: 92, text: "كم عدد الكرات الذهبية (Ballon d'Or) التي حققها الأسطورة ليونيل ميسي؟", options: ["6", "7", "8", "9"], correct: 2, minLevel: 45 },
+  { id: 93, text: "من هو اللاعب الذي يملك أكبر عدد من التمريرات الحاسمة (Assists) في تاريخ البريميرليغ؟", options: ["سيسك فابريغاس", "واين روني", "ريان غيغز", "كيفين دي بروين"], correct: 2, minLevel: 45 },
+  { id: 94, text: "ما هي الدولة الأفريقية التي نظمت بطولة كأس العالم لكرة القدم لأول مرة في القارة؟", options: ["مصر", "المغرب", "جنوب أفريقيا", "نيجيريا"], correct: 2, minLevel: 45 },
+  { id: 95, text: "من هو اللاعب التونسي الأسطوري الذي سجل أول هدف للعرب في تاريخ كأس العالم 1978؟", options: ["طارق ذياب", "علي الكعبي", "تميم الحزامي", "فيصل الدخيل"], correct: 1, minLevel: 45 },
+  { id: 96, text: "أي نادٍ أوروبي عريق يلقب بـ 'الخفافيش' ويلعب في ملعب الميستايا؟", options: ["إشبيلية", "فالنسيا", "فاريال", "بيلباو"], correct: 1, minLevel: 45 },
+  { id: 97, text: "من هو اللاعب الملقب بـ 'موزارت الصغير' ولعب لأرسنال وبروسيا دورتموند؟", options: ["توماس روزيسكي", "سيسك فابريغاس", "ماريو غوتزه", "ماركو رويس"], correct: 0, minLevel: 45 },
+  { id: 98, text: "ما هو النادي البرازيلي الذي انطلقت منه موهبة الأسطورة نيمار داسيلفا؟", options: ["فلامنغو", "بالميراس", "سانتوس", "ساو باولو"], correct: 2, minLevel: 45 },
+  { id: 99, text: "من هو المدافع التاريخي الوحيد الذي حقق جائزة الكرة الذهبية في القرن الحادي والعشرين؟", options: ["باولو مالديني", "فابيو كانافارو", "سيرجيو راموس", "فيرجيل فان دايك"], correct: 1, minLevel: 45 },
+  { id: 100, text: "أي منتخب فاز بلقب كأس العالم لكرة القدم عام 1998 التي أقيمت على أرضه؟", options: ["البرازيل", "إيطاليا", "فرنسا", "كرواتيا"], correct: 2, minLevel: 45 },
+  { id: 101, text: "من هو هداف منتخب إنجلترا التاريخي في كل المسابقات؟", options: ["واين روني", "بوبي تشارلتون", "هاري كين", "ألان شيرر"], correct: 2, minLevel: 45 },
+  { id: 102, text: "أي لاعب يلقب بـ 'المهندس' واشتهر بكراته الثابتة الساحرة مع ميلان ويوفنتوس؟", options: ["أندريا بيرلو", "فرانشيسكو توتي", "أليساندرو ديل بييرو", "كاكا"], correct: 0, minLevel: 45 },
+  { id: 103, text: "كم عدد ألقاب نادي ريال مدريد في بطولة دوري أبطال أوروبا (حتى عام 2024)؟", options: ["13", "14", "15", "16"], correct: 2, minLevel: 45 },
+  { id: 104, text: "من هو اللاعب الآسيوي الأعلى تقييماً ويسجل أرقاماً قياسية مع توتنهام في البريميرليغ؟", options: ["بارك جي سونغ", "سون هيونغ مين", "ميناميانو", "كاغاوا"], correct: 1, minLevel: 45 },
+  { id: 105, text: "ما هو النادي الذي يطلق عليه لقب 'الفيرديبيلانكوس' ويعتبر غريماً تقليدياً لإشبيلية؟", options: ["ريال بيتيس", "فالنسيا", "مالقا", "غرناطة"], correct: 0, minLevel: 45 }
 ];
 
-// المتغيرات الديناميكية
-let gameQuestions = [];
+// ==========================================================
+// 3. محرك اللعبة الأساسي والتكتيكات الفورية
+// ==========================================================
 let currentQuestionIndex = 0;
 let score = 0;
+let hearts = 5;
 let correctAnswersCount = 0;
 let totalAnsweredCount = 0;
-let hearts = 5;
 
-// ربط الـ DOM
+const heartsContainer = document.getElementById("heartsContainer");
+const scoreValue = document.getElementById("scoreValue");
+const correctCount = document.getElementById("correctCount");
+const answeredCount = document.getElementById("answeredCount");
+const difficultyTag = document.getElementById("difficultyTag");
 const questionText = document.getElementById("questionText");
 const optionsContainer = document.getElementById("optionsContainer");
 const feedbackMsg = document.getElementById("feedbackMsg");
 const nextBtn = document.getElementById("nextBtn");
-const scoreValue = document.getElementById("scoreValue");
-const correctCount = document.getElementById("correctCount");
-const answeredCount = document.getElementById("answeredCount");
-const heartsContainer = document.getElementById("heartsContainer");
-const difficultyTag = document.getElementById("difficultyTag");
-
-const googleLoginBtn = document.getElementById("googleLoginBtn");
-const discordLoginBtn = document.getElementById("discordLoginBtn");
-const manualSaveBtn = document.getElementById("manualSaveBtn");
-const userProfileInfo = document.getElementById("userProfileInfo");
-const userAvatarImg = document.getElementById("userAvatarImg");
-const userProfileName = document.getElementById("userProfileName");
-const logoutBtn = document.getElementById("logoutBtn");
-const guestModeMsg = document.getElementById("guestModeMsg");
-const leaderboardList = document.getElementById("leaderboardList");
-
 const quizCard = document.getElementById("quizCard");
 const gameOverScreen = document.getElementById("gameOverScreen");
 const prizeScreen = document.getElementById("prizeScreen");
 const lostAnsweredCount = document.getElementById("lostAnsweredCount");
-
 const hamburgerBtn = document.getElementById("hamburgerBtn");
 const menuDropdown = document.getElementById("menuDropdown");
 
-window.onload = function() {
-  initGame(); // تشغيل اللعبة فوراً دون انتظار ربط السيرفر لضمان تحميل الأسئلة
-  initAuthCheck();
-  loadLeaderboard();
-};
-
-function initAuthCheck() {
-  if (!supabaseClient) return;
-  try {
-    supabaseClient.auth.getSession().then(({ data: { session } }) => {
-      if (session && session.user) handleUserIn(session.user);
-      else handleUserOut();
-    });
-    supabaseClient.auth.onAuthStateChange((_event, session) => {
-      if (session && session.user) handleUserIn(session.user);
-      else handleUserOut();
-    });
-  } catch (e) {
-    console.error("Auth listen failed:", e);
-  }
-}
-
-function handleUserIn(user) {
-  currentUser = user;
-  if (guestModeMsg) guestModeMsg.style.display = "none";
-  if (googleLoginBtn) googleLoginBtn.style.display = "none";
-  if (discordLoginBtn) discordLoginBtn.style.display = "none";
-  if (manualSaveBtn) manualSaveBtn.style.display = "block"; 
-  if (userProfileInfo) userProfileInfo.classList.remove("hidden");
-  if (logoutBtn) logoutBtn.classList.remove("hidden");
-  if (userProfileName) userProfileName.innerText = user.user_metadata.full_name || user.user_metadata.name || "بطل تكتيكي";
-  if (userAvatarImg) userAvatarImg.src = user.user_metadata.avatar_url || "https://placeholder.co/100";
-  saveUserScore(score);
-}
-
-function handleUserOut() {
-  currentUser = null;
-  if (guestModeMsg) guestModeMsg.style.display = "block";
-  if (googleLoginBtn) googleLoginBtn.style.display = "block";
-  if (discordLoginBtn) discordLoginBtn.style.display = "block";
-  if (manualSaveBtn) manualSaveBtn.style.display = "none";
-  if (userProfileInfo) userProfileInfo.classList.add("hidden");
-  if (logoutBtn) logoutBtn.classList.add("hidden");
-}
-
-if (googleLoginBtn) {
-  googleLoginBtn.onclick = async function() {
-    if (!supabaseClient) return alert("⚠️ السيرفر غير متصل، العب الآن كزائر والأسئلة ستعمل!");
-    await supabaseClient.auth.signInWithOAuth({
-      provider: 'google',
-      options: { queryParams: { client_id: GOOGLE_CLIENT_ID }, redirectTo: REDIRECT_URL }
-    });
-  };
-}
-
-if (discordLoginBtn) {
-  discordLoginBtn.onclick = async function() {
-    if (!supabaseClient) return alert("⚠️ السيرفر غير متصل، العب الآن كزائر والأسئلة ستعمل!");
-    await supabaseClient.auth.signInWithOAuth({
-      provider: 'discord',
-      options: { redirectTo: REDIRECT_URL }
-    });
-  };
-}
-
-if (logoutBtn) {
-  logoutBtn.onclick = async function() {
-    if (supabaseClient) await supabaseClient.auth.signOut();
-    window.location.reload();
-  };
-}
-
-if (manualSaveBtn) {
-  manualSaveBtn.onclick = function() {
-    if (!currentUser) return alert("⚠️ سجل دخولك أولاً!");
-    saveUserScore(score, true);
-  };
-}
-
-async function saveUserScore(currentScore, isManual = false) {
-  if (!supabaseClient || !currentUser) return;
-  const userId = currentUser.id;
-  const userName = currentUser.user_metadata.full_name || currentUser.user_metadata.name || "بطل مجهول";
-  const userAvatar = currentUser.user_metadata.avatar_url || "";
-
-  try {
-    let { data, error } = await supabaseClient.from('leaderboard').select('high_score').eq('user_id', userId).single();
-    let previousHighScore = data ? data.high_score : 0;
-
-    if (currentScore > previousHighScore || !data) {
-      const { error: upsertError } = await supabaseClient.from('leaderboard').upsert({
-        user_id: userId, username: userName, avatar_url: userAvatar, high_score: currentScore, updated_at: new Date()
-      }, { onConflict: 'user_id' });
-
-      if (!upsertError) {
-        loadLeaderboard();
-        if (isManual) alert("💾 تم حفظ رصيدك القياسي بنجاح في لوحة الصدارة!");
-      }
-    } else {
-      if (isManual) alert(`💡 رصيدك الحالي (${currentScore}) لم يتخطى رقمك القياسي السابق (${previousHighScore})!`);
-    }
-  } catch (err) { console.error(err); }
-}
-
-async function loadLeaderboard() {
-  if (!supabaseClient) return;
-  try {
-    let { data: leaderboard, error } = await supabaseClient.from('leaderboard').select('*').order('high_score', { ascending: false }).limit(10);
-    if (!error) renderLeaderboard(leaderboard);
-  } catch (e) { console.error(e); }
-}
-
-function renderLeaderboard(list) {
-  if (!leaderboardList) return;
-  if (list && list.length > 0) {
-    leaderboardList.innerHTML = list.map((player, index) => {
-      let medal = index === 0 ? "👑" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`;
-      return `<li style="display: flex; align-items: center; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid #111;">
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="font-weight: bold; color: #d4af37; width: 22px;">${medal}</span>
-                  <img src="${player.avatar_url || 'https://placeholder.co/30'}" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;">
-                  <span style="max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #eee;">${player.username}</span>
-                </div>
-                <span style="color: #d4af37; font-weight: bold;">${player.high_score}</span>
-              </li>`;
-    }).join("");
-  } else {
-    leaderboardList.innerHTML = `<li style="text-align: center; color: #555;">كن أول من يتصدر اللوحة! 🔥</li>`;
-  }
-}
-
 function initGame() {
-  score = 0; correctAnswersCount = 0; totalAnsweredCount = 0; hearts = 5;
+  currentQuestionIndex = 0;
+  score = 0;
+  hearts = 5;
+  correctAnswersCount = 0;
+  totalAnsweredCount = 0;
+  
   if (quizCard) quizCard.classList.remove("hidden");
   if (gameOverScreen) gameOverScreen.classList.add("hidden");
-  if (prizeScreen) prizeScreen.classList.add("hidden");
+  if (prizeScreen) prizeScreen.add ? prizeScreen.add("hidden") : prizeScreen.classList.add("hidden");
+  
   updateStatsUI();
-  buildMatchQuestions();
   loadQuestion();
-}
-
-function buildMatchQuestions() {
-  gameQuestions = [...questionsDatabase].sort(() => 0.5 - Math.random()).slice(0, 50); 
 }
 
 function updateStatsUI() {
@@ -345,56 +244,69 @@ function updateStatsUI() {
   if (heartsContainer) {
     heartsContainer.innerHTML = "";
     for (let i = 0; i < 5; i++) {
-      let hSpan = document.createElement("span");
-      hSpan.className = "heart";
-      hSpan.innerText = i < hearts ? "❤️" : "🖤";
-      heartsContainer.appendChild(hSpan);
+      const heartSpan = document.createElement("span");
+      heartSpan.className = "heart";
+      heartSpan.innerText = i < hearts ? "❤️" : "🖤";
+      heartsContainer.appendChild(heartSpan);
     }
   }
 
   if (difficultyTag) {
-    if (totalAnsweredCount < 15) { difficultyTag.innerText = "📘 مستوى المبتدئين"; difficultyTag.style.background = "#1e3a8a"; }
-    else if (totalAnsweredCount < 35) { difficultyTag.innerText = "📙 المستوى المتوسط التكتيكي"; difficultyTag.style.background = "#b45309"; }
-    else { difficultyTag.innerText = "🟥 مستوى أساطير الـ Z3Z3"; difficultyTag.style.background = "#7f1d1d"; }
+    if (correctAnswersCount >= 45) {
+      difficultyTag.innerText = "🔥 مستوى خبراء التكتيك";
+      difficultyTag.style.background = "#4d1414";
+    } else if (correctAnswersCount >= 20) {
+      difficultyTag.innerText = "⚡ المستوى المتوسط التكتيكي";
+      difficultyTag.style.background = "#b38600";
+    } else {
+      difficultyTag.innerText = "📘 مستوى المبتدئين";
+      difficultyTag.style.background = "#1a3a5c";
+    }
   }
 }
 
 function loadQuestion() {
-  if (totalAnsweredCount >= 50) { showWinningScreen(); return; }
-  if (gameQuestions.length === 0) { buildMatchQuestions(); }
-  if (currentQuestionIndex >= gameQuestions.length) { currentQuestionIndex = 0; }
+  if (feedbackMsg) feedbackMsg.innerText = "✨ اختر الإجابة الصحيحة لتبدأ التحدي";
+  if (nextBtn) nextBtn.classList.add("hidden");
 
-  let currentQuestion = gameQuestions[currentQuestionIndex];
-  if (questionText) questionText.innerText = `${totalAnsweredCount + 1}. ${currentQuestion.text}`;
-  
+  if (correctAnswersCount >= 50) {
+    showWinningScreen();
+    return;
+  }
+
+  let availableQuestions = questionsDatabase.filter(q => correctAnswersCount >= q.minLevel);
+  if (availableQuestions.length === 0) availableQuestions = questionsDatabase;
+
+  const currentQuestion = availableQuestions[currentQuestionIndex % availableQuestions.length];
+
+  if (questionText) questionText.innerText = currentQuestion.text;
   if (optionsContainer) {
     optionsContainer.innerHTML = "";
-    currentQuestion.options.forEach((opt, idx) => {
-      let btn = document.createElement("button");
+    currentQuestion.options.forEach((option, idx) => {
+      const btn = document.createElement("button");
       btn.className = "option-btn";
-      btn.innerText = opt;
-      btn.onclick = function() { checkPlayerAnswer(idx, btn); };
+      btn.innerText = option;
+      btn.onclick = function() { checkAnswer(idx, currentQuestion.correct, btn); };
       optionsContainer.appendChild(btn);
     });
   }
-  if (feedbackMsg) { feedbackMsg.innerText = "✨ فكّر جيداً قبل اختيار تكتيك الإجابة الصحيحة!"; feedbackMsg.style.color = "#aaa"; }
-  if (nextBtn) nextBtn.classList.add("hidden");
 }
 
-function checkPlayerAnswer(selectedIdx, clickedButton) {
-  let currentQuestion = gameQuestions[currentQuestionIndex];
-  let allButtons = optionsContainer.querySelectorAll(".option-btn");
-  allButtons.forEach(b => b.disabled = true);
+function checkAnswer(selectedIdx, correctIdx, clickedBtn) {
+  const allButtons = optionsContainer.querySelectorAll(".option-btn");
+  allButtons.forEach(btn => btn.disabled = true);
 
-  if (selectedIdx === currentQuestion.correct) {
-    clickedButton.style.background = "#238636"; clickedButton.style.borderColor = "#2ea043";
-    if (feedbackMsg) { feedbackMsg.innerText = "🔥 إجابة صحيحة تكتيكية مذهلة! زاد رصيدك +2 نقاط."; feedbackMsg.style.color = "#2ea043"; }
-    score += 2; correctAnswersCount++;
-    saveUserScore(score);
+  if (selectedIdx === correctIdx) {
+    clickedBtn.style.background = "#238636";
+    clickedBtn.style.borderColor = "#2ea043";
+    if (feedbackMsg) feedbackMsg.innerText = "🔥 إجابة أسطورية صحيحة! +10 نقاط";
+    score += 10;
+    correctAnswersCount++;
   } else {
-    clickedButton.style.background = "#da3637"; clickedButton.style.borderColor = "#f85149";
-    if (allButtons[currentQuestion.correct]) allButtons[currentQuestion.correct].style.background = "#238636";
-    if (feedbackMsg) { feedbackMsg.innerText = "❌ إجابة خاطئة! فقدت قلباً تكتيكياً واحداً."; feedbackMsg.style.color = "#f85149"; }
+    clickedBtn.style.background = "#da3637";
+    clickedBtn.style.borderColor = "#f85149";
+    allButtons[correctIdx].style.background = "#238636";
+    if (feedbackMsg) feedbackMsg.innerText = "💔 تكتيك خاطئ! فقدت قلباً.";
     hearts--;
   }
 
@@ -423,6 +335,60 @@ if (hamburgerBtn && menuDropdown) {
   document.addEventListener("click", function(e) { if (!hamburgerBtn.contains(e.target) && !menuDropdown.contains(e.target)) menuDropdown.classList.add("hidden"); });
 }
 if (document.getElementById("menuReset")) document.getElementById("menuReset").onclick = function(e) { e.preventDefault(); initGame(); menuDropdown.classList.add("hidden"); };
-if (document.getElementById("menuInfo")) document.getElementById("menuInfo").onclick = function(e) { e.preventDefault(); alert("🏆 كأس المعرفة:\n• نظام متصدرين مدمج بالكامل!"); menuDropdown.classList.add("hidden"); };
+if (document.getElementById("menuInfo")) document.getElementById("menuInfo").onclick = function(e) { e.preventDefault(); alert("🏆 كأس المعرفة:\n• لديك 5 قلوب فقط للخطأ.\n• تخطى 50 سؤال لتربح الجائزة الأسطورية للـ Z3Z3 Tactics!"); menuDropdown.classList.add("hidden"); };
 
-document.querySelectorAll(".restart-action-btn").forEach(btn => { btn.onclick = function() { initGame(); }; });
+if (document.getElementById("restartGameBtn1")) document.getElementById("restartGameBtn1").onclick = function() { initGame(); };
+if (document.getElementById("restartGameBtn2")) document.getElementById("restartGameBtn2").onclick = function() { initGame(); };
+
+// ==========================================================
+// 4. نظام الحفظ السحابي التلقائي للمتصدرين
+// ==========================================================
+async function saveUserScore(finalScore) {
+  if (!currentUser || !supabaseClient) return;
+  try {
+    const { error } = await supabaseClient.from('leaderboard').upsert({
+      id: currentUser.id,
+      username: currentUser.user_metadata?.full_name || currentUser.email,
+      high_score: finalScore,
+      updated_at: new Date()
+    });
+    if (!error) fetchLeaderboard();
+  } catch (e) { console.log(e); }
+}
+
+async function loadUserProgress() {
+  if (!currentUser || !supabaseClient) return;
+  try {
+    const { data, error } = await supabaseClient.from('leaderboard').select('high_score').eq('id', currentUser.id).single();
+    if (data && !error) {
+      score = data.high_score;
+      if (scoreValue) scoreValue.innerText = score;
+    }
+  } catch (e) { console.log(e); }
+}
+
+async function fetchLeaderboard() {
+  if (!supabaseClient) return;
+  try {
+    const { data, error } = await supabaseClient.from('leaderboard').select('username, high_score').order('high_score', { ascending: false }).limit(5);
+    if (data && !error) {
+      renderLeaderboard(data);
+    }
+  } catch (e) { console.log(e); }
+}
+
+function renderLeaderboard(players) {
+  const leaderboardList = document.getElementById("leaderboardList");
+  if (!leaderboardList) return;
+  if (players.length > 0) {
+    leaderboardList.innerHTML = players.map((player, index) => {
+      let medal = index === 0 ? "🥇 " : index === 1 ? "🥈 " : index === 2 ? "🥉 " : "🏅 ";
+      return `<li style="padding: 6px 0; border-bottom: 1px solid #111; color: #ccc; display: flex; justify-content: space-between;">
+                <span>${medal}${player.username.split(' ')[0]}</span>
+                <span style="color: #d4af37; font-weight: bold;">${player.high_score}</span>
+              </li>`;
+    }).join("");
+  } else {
+    leaderboardList.innerHTML = `<li style="text-align: center; color: #555;">كن أول من يتصدر اللوحة! 🔥</li>`;
+  }
+}
