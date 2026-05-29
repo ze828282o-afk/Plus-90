@@ -134,4 +134,114 @@
 
   <script src="script.js"></script>
 </body>
+</html>192.168.1.1<!DOCTYPE html>
+<html lang=\"ar\" dir=\"rtl\">
+<head>
+  <meta charset=\"UTF-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+  <title>كأس المعرفة ⚽🏆 - النسخة الذهبية</title>
+  <meta name=\"google-site-verification\" content=\"zmCJzSwNt5eJH5ojuXoqyr5B6dyxqJtsJCPRRh9k0z8\" />
+  <link rel=\"icon\" type=\"image/png\" href=\"favicon.png\">
+  <link rel=\"stylesheet\" href=\"style.css\">
+  <link href=\"https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap\" rel=\"stylesheet\">
+  <script src=\"https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2\"></script>
+</head>
+<body>
+
+  <div class=\"main-wrapper\">
+    
+    <div class=\"eid-side-panel\">
+      <div class=\"eid-title\">🐑 عيد أضحى سعيد 🌟</div>
+      <div class=\"sheep-character\">
+        <div class=\"sheep-cloud\">
+          <div class=\"sheep-head\">
+            <div class=\"sheep-eye left\"></div>
+            <div class=\"sheep-eye right\"></div>
+            <div class=\"sheep-horn left\"></div>
+            <div class=\"sheep-horn right\"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class=\"auth-container\">
+        <div id=\"guestModeMsg\" class=\"guest-msg\">🚀 سجل دخولك لتنافس في لوحة الأبطال السحابية!</div>
+        
+        <div id=\"userProfileInfo\" class=\"user-profile hidden\">
+          <img id=\"userAvatarImg\" src=\"https://placeholder.co/100\" alt=\"Avatar\">
+          <span id=\"userProfileName\">بطل تكتيكي</span>
+        </div>
+
+        <button class=\"login-btn google-btn\" id=\"googleLoginBtn\">🔑 دخول بواسطة Google</button>
+        <button class=\"login-btn discord-btn\" id=\"discordLoginBtn\">🎮 دخول بواسطة Discord</button>
+        <button class=\"login-btn save-manual-btn\" id=\"manualSaveBtn\" style=\"display:none;\">💾 حفظ يدوي سريع</button>
+        <button class=\"logout-btn hidden\" id=\"logoutBtn\">🚪 خروج</button>
+      </div>
+
+      <div class=\"leaderboard-box\">
+        <h3>🏆 قائمة متصدري Z3Z3</h3>
+        <ul id=\"leaderboardList\">
+          <li style=\"text-align: center; color: #555;\">جاري تحميل أبطال التكتيك...</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class=\"quiz-container\">
+      <header>
+        <div class=\"logo-section\">
+          <h1>Z3Z3 Tactics ⚽</h1>
+          <p>أقوى تحدي كروي في "اتميدة"</p>
+        </div>
+        <div class=\"menu-wrapper\">
+          <button class=\"hamburger-btn\" id=\"hamburgerBtn\">☰</button>
+          <div class=\"menu-dropdown hidden\" id=\"menuDropdown\">
+            <a href=\"#\" id=\"menuReset\">🔄 إعادة التحدي</a>
+            <a href=\"#\" id=\"menuInfo\">ℹ️ معلومات المسابقة</a>
+          </div>
+        </div>
+      </header>
+
+      <div class=\"game-stats-row\">
+        <div class=\"hearts-display\" id=\"heartsContainer\">
+          <span class=\"heart\">❤️</span><span class=\"heart\">❤️</span><span class=\"heart\">❤️</span><span class=\"heart\">❤️</span><span class=\"heart\">❤️</span>
+        </div>
+        <div class=\"stats-compact\">
+          <span>⭐ النقاط: <span id=\"scoreValue\">0</span></span>
+          <span>🎯 الأسئلة: <span id=\"correctCount\">0</span>/<span id=\"answeredCount\">0</span></span>
+        </div>
+      </div>
+
+      <div class=\"quiz-card\" id=\"quizCard\">
+        <div class=\"difficulty-tag\" id=\"difficultyTag\">📘 مستوى المبتدئين</div>
+        <div class=\"question-text\" id=\"questionText\">جاري التحميل...</div>
+        <div class=\"options\" id=\"optionsContainer\"></div>
+        <div class=\"feedback\" id=\"feedbackMsg\">✨ اختر الإجابة الصحيحة لتبدأ التحدي</div>
+        <button class=\"next-btn hidden\" id=\"nextBtn\">▶ سؤال جديد</button>
+      </div>
+      <footer>💡 أخطأ 5 مرات وتخسر، صامد لـ 50 سؤال كامل للإجابة لتربح الجائزة!</footer>
+    </div>
+
+    <div class=\"prize-screen red-themed hidden\" id=\"gameOverScreen\">
+      <div class=\"prize-badge red-badge\">💔 انتهت المحاولة</div>
+      <h2>حظاً أوفر يا بطل! 💥</h2>
+      <p class=\"prize-instructions\">لقد نفدت قلوبك الـ 5 بعد الإجابة على <span id=\"lostAnsweredCount\" class=\"gold-text\">0</span> سؤال صحيح.</p>
+      <div class=\"alert-box red-box\">
+        💡 تم حفظ رصيد إجاباتك الحالي تلقائياً في القائمة الجانبية! حاول مجدداً وحطم الأرقام القياسية!
+      </div>
+      <button class=\"claim-btn restart-action-btn\" id=\"restartGameBtn1\">🔄 حاول مرة أخرى فوراً</button>
+    </div>
+
+    <div class=\"prize-screen hidden\" id=\"prizeScreen\">
+      <div class=\"prize-badge\">🎁 مفاجأة الأبطال 👑</div>
+      <h2>كفووو يا أسطورة! 🔥</h2>
+      <p class=\"prize-instructions\">لقد صمدت بنجاح وتخطيت الإجابة على <span class=\"gold-text\">50</span> سؤالاً كاملاً دون أن تخسر!</p>
+      <div class=\"alert-box\">
+        📸 خذ لقطة شاشة (Screenshot) حالاً للمستوى والشاشة لإثبات فوزك، ثم اضغط على الزر بالأسفل للذهاب واستلام جائزتك عبر تيك توك فوراً!
+      </div>
+      <a href=\"https://www.tiktok.com\" target=\"_blank\" class=\"claim-btn\">📱 اضغط هنا للانتقال وتسلّم جائزتك</a>
+      <button class=\"restart-minimal-btn restart-action-btn\">🔄 العودة للرئيسية وبدء تحدي جديد</button>
+    </div>
+
+  </div>
+
+</body>
 </html>
